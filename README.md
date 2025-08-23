@@ -1,8 +1,8 @@
-# GitHub Actions Workflow: publish-container
+# workflows-containers
 
-A reusable GitHub Actions workflow for building and publishing Docker container images to container registries.
+Reusable GitHub Actions workflows for building and publishing Docker container images to container registries.
 
-## Overview
+## publish.yaml
 
 This workflow automates the process of building Docker images from one or more Dockerfiles and pushing them to a container registry (GitHub Container Registry by default). It supports:
 
@@ -12,7 +12,7 @@ This workflow automates the process of building Docker images from one or more D
 - Build caching for faster builds
 - Flexible registry configuration
 
-## Usage
+### Usage
 
 To use this workflow in your repository, create a workflow file (e.g., `.github/workflows/build.yaml`) with the following content:
 
@@ -56,7 +56,7 @@ jobs:
         ]
 ```
 
-## Inputs
+### Inputs
 
 | Input | Description | Required | Default |
 |-------|-------------|----------|---------|
@@ -65,7 +65,7 @@ jobs:
 | `push` | Whether to push the Docker image | No | `true` |
 | `registry` | The container registry to push to | No | `ghcr.io` |
 
-### Dockerfile Configuration
+#### Dockerfile Configuration
 
 The `dockerfiles` input accepts a JSON array of objects with the following properties:
 
@@ -76,13 +76,13 @@ The `dockerfiles` input accepts a JSON array of objects with the following prope
 
 The resulting image name will be: `registry/owner/prefix-reponame-postfix:tag`
 
-## Secrets
+### Secrets
 
 | Secret | Description | Required | Default |
 |--------|-------------|----------|---------|
 | `docker_password` | Docker password for registry login | No | `GITHUB_TOKEN` |
 
-## How It Works
+### How It Works
 
 The workflow consists of two jobs:
 
@@ -98,8 +98,6 @@ For each Dockerfile configuration, the workflow:
 5. Extracts metadata (tags, labels) for Docker
 6. Logs the configuration details
 7. Builds and optionally pushes the Docker image
-
-## Advanced Usage
 
 ### Custom Registry
 
@@ -145,7 +143,7 @@ jobs:
 
 This would result in an image named: `ghcr.io/owner/service-{{ reponame }}-backend:tag`
 
-## Permissions
+### Permissions
 
 The workflow requires the following permissions:
 
