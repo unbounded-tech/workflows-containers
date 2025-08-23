@@ -10,7 +10,15 @@ permissions:
 
 jobs:
 
+  build-test:
+    name: Build Test
+    uses: unbounded-tech/workflows-containers/.github/workflows/_test.yaml@main
+    with:
+      push: false
+    secrets: inherit
+
   version-and-tag:
+    needs: build-test
     name: Version and Tag
     uses: unbounded-tech/workflow-vnext-tag/.github/workflows/workflow.yaml@v1.17.4
     secrets: inherit

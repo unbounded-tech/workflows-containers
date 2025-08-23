@@ -9,7 +9,16 @@ permissions:
   contents: write
 
 jobs:
-  call-release-workflow:
+
+  push-test:
+    name: Push Test
+    uses: unbounded-tech/workflows-containers/.github/workflows/_test.yaml@main
+    with:
+      push: true
+    secrets: inherit
+
+  release:
+    needs: push-test
     uses: unbounded-tech/workflow-simple-release/.github/workflows/workflow.yaml@v2.0.0
     with:
       tag: ${{ github.ref_name }}
