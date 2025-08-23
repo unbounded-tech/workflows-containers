@@ -11,9 +11,14 @@ permissions:
 jobs:
 
   push-test:
-    name: Push Test
-    uses: unbounded-tech/workflows-containers/.github/workflows/_test.yaml@main
+    name: Build and Push Test
+    uses: unbounded-tech/workflows-containers/.github/workflows/publish.yaml@main
     with:
+      dockerfiles: |
+        [
+          {"dockerfile":"test-1.Dockerfile","context":"./test","prefix":"test1-"},
+          {"dockerfile":"./test/test-2.Dockerfile","postfix":"test2"}
+        ]
       push: true
 
   release:
