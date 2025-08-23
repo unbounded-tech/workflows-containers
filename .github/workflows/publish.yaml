@@ -3,73 +3,125 @@ name: publish-container
 on:
   workflow_call:
     inputs:
-      integrationTestsContainer:
-        required: false 
+
+      docker_username:
+        description: 'Docker username for registry login. Default: github.actor'
+        required: false
+        type: string
+        default: ''
+
+      dockerfiles:
+        description: 'JSON array of objects with dockerfile path, context, prefix and postfix. Format: [{"dockerfile":"path/to/Dockerfile","context":"path/to/context","prefix":"","postfix":""}]. Results in image name: ghcr.io/ORG/prefix-{{ reponame }}-postfix:{{ tag }}. Default: [{"dockerfile":"./Dockerfile","context":".","prefix":"","postfix":""}]'
+        required: false
+        type: string
+        default: '[{"dockerfile":"./Dockerfile","context":".","prefix":"","postfix":""}]'
+
+      push:
+        description: 'Whether to push the Docker image. Default: true'
+        required: false
         type: boolean
+        default: true
+
+      registry:
+        description: 'The container registry to push to. Default: ghcr.io'
+        required: false
+        type: string
+        default: 'ghcr.io'
+    
     secrets:
-      GH_ORG_TOKEN:
-        required: true
+      docker_password:
+        description: 'Docker password for registry login. Default: GITHUB_TOKEN'
+        required: false
 
 jobs:
-
-  publish-container:
+  # Process the dockerfiles input to handle simplified specifications
+  setup:
     runs-on: ubuntu-latest
+    outputs:
+      processed_dockerfiles: ${{ steps.process-dockerfiles.outputs.processed }}
+    
+    steps:
+    - name: Process dockerfiles input
+      id: process-dockerfiles
+      run: |
+        # Process the input to handle simplified specifications
+        processed=$(node -e '
+          const input = JSON.parse(`${{ inputs.dockerfiles }}`);
+          const processed = input.map(item => {
+            // If only dockerfile is specified, set defaults for other properties
+            return {
+              dockerfile: item.dockerfile,
+              context: item.context || ".",
+              prefix: item.prefix || "",
+              postfix: item.postfix || ""
+            };
+          });
+          console.log(JSON.stringify(processed));
+        ')
+        echo "processed=${processed}" >> $GITHUB_OUTPUT
+
+  # Build and push Docker images
+  publish-container:
+    needs: setup
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        config: ${{ fromJson(needs.setup.outputs.processed_dockerfiles) }}
 
     permissions:
       packages: write
       contents: write
 
     steps:
-
     - name: Checkout
-      uses: actions/checkout@v3
-      with:
-        persist-credentials: false
-        fetch-depth: 0
+      uses: actions/checkout@v5
 
-    - name: downcase REPO
+    - name: Set lowercase names
+      id: lowercase
       run: |
-        echo "REPO=${GITHUB_REPOSITORY,,}" >>${GITHUB_ENV}
+        echo "owner=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+        echo "repo=$(echo ${{ github.event.repository.name }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
 
     - name: Set up QEMU
-      uses: docker/setup-qemu-action@v2
+      uses: docker/setup-qemu-action@v3
 
     - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v2
+      uses: docker/setup-buildx-action@v3
 
     - name: Login to GitHub Container Registry
-      uses: docker/login-action@v2
+      uses: docker/login-action@v3
       with:
-        registry: ghcr.io
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+        registry: ${{ inputs.registry }}
+        username: ${{ inputs.docker_username != '' && inputs.docker_username || github.actor }}
+        password: ${{ secrets.docker_password != '' && secrets.docker_password || secrets.GITHUB_TOKEN }}
 
     - name: Extract metadata (tags, labels) for Docker
       id: meta
-      uses: docker/metadata-action@v4
+      uses: docker/metadata-action@v5
       with:
-        images: ghcr.io/${{ env.REPO }}
+        images: ${{ inputs.registry }}/${{ steps.lowercase.outputs.owner }}/${{ matrix.config.prefix }}${{ steps.lowercase.outputs.repo }}${{ matrix.config.postfix }}
 
-    - name: Build and push Docker image
-      uses: docker/build-push-action@v3
+    - name: Log configuration
+      run: |
+        echo "Organization: ${{ github.repository_owner }}"
+        echo "Repository: ${{ github.event.repository.name }}"
+        echo "Lowercase Organization: ${{ steps.lowercase.outputs.owner }}"
+        echo "Lowercase Repository: ${{ steps.lowercase.outputs.repo }}"
+        echo "Using Dockerfile: ${{ matrix.config.dockerfile }}"
+        echo "Using prefix: ${{ matrix.config.prefix }}"
+        echo "Using postfix: ${{ matrix.config.postfix }}"
+        echo "Labels: ${{ steps.meta.outputs.labels }}"
+        echo "Tags: ${{ steps.meta.outputs.tags }}"
+        echo "Package name: ${{ inputs.registry }}/${{ steps.lowercase.outputs.owner }}/${{ matrix.config.prefix }}${{ steps.lowercase.outputs.repo }}${{ matrix.config.postfix }}:${{ github.ref_name }}"
+
+    - name: Build and Optionally Push Docker image
+      uses: docker/build-push-action@v6
       with:
-        context: .
-        push: true
+        context: ${{ matrix.config.context }}
+        push: ${{ inputs.push }}
+        file: ${{ matrix.config.dockerfile }}
         tags: |
           ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
-        cache-from: type=registry,ref=ghcr.io/${{ env.REPO }}:buildcache
-        cache-to: type=registry,ref=ghcr.io/${{ env.REPO }}:buildcache,mode=max
-
-    - name: Build and push integration tests docker image
-      if: inputs.integrationTestsContainer
-      uses: docker/build-push-action@v3
-      with:
-        context: .
-        file: ./jest.integration.Dockerfile
-        push: true
-        tags: |
-          ghcr.io/${{ env.REPO }}-integration-tests:${{ github.ref_name }}
-        labels: ${{ steps.meta.outputs.labels }}
-        cache-from: type=registry,ref=ghcr.io/${{ env.REPO }}-integration-tests:buildcache
-        cache-to: type=registry,ref=ghcr.io/${{ env.REPO }}-integration-tests:buildcache,mode=max
+        cache-from: type=registry,ref=${{ inputs.registry }}/${{ steps.lowercase.outputs.owner }}/${{ matrix.config.prefix }}${{ steps.lowercase.outputs.repo }}${{ matrix.config.postfix }}:buildcache
+        cache-to: type=registry,ref=${{ inputs.registry }}/${{ steps.lowercase.outputs.owner }}/${{ matrix.config.prefix }}${{ steps.lowercase.outputs.repo }}${{ matrix.config.postfix }}:buildcache,mode=max
