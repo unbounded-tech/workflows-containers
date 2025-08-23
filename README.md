@@ -1,175 +1,159 @@
-# actions
+# GitHub Actions Workflow: publish-container
 
-Shared Github Actions Workflows
+A reusable GitHub Actions workflow for building and publishing Docker container images to container registries.
 
-Most jobs expect a Personal Access Token to be set as an organizational secret named `GH_ORG_TOKEN` which has permissions for:
-* repo
-* write:packages
+## Overview
 
-You can generate this token here: https://github.com/settings/tokens/new?scopes=repo,write:packages
+This workflow automates the process of building Docker images from one or more Dockerfiles and pushing them to a container registry (GitHub Container Registry by default). It supports:
 
-## Example
+- Building multiple Docker images in parallel
+- Customizing image names with prefixes and postfixes
+- Automatic tagging based on Git references
+- Multi-platform builds with QEMU
+- Build caching for faster builds
+- Flexible registry configuration
 
-### Github Release
+## Usage
 
-*.github/workflows/release.yaml*
+To use this workflow in your repository, create a workflow file (e.g., `.github/workflows/build.yaml`) with the following content:
+
 ```yaml
-name: release
+name: Build and Publish Container
+
 on:
   push:
-    branches:
-    - main
-
-jobs:
-
-  release:
-    uses: CloudNativeEntrepreneur/actions/.github/workflows/github-release.yaml@main
-    secrets: inherit
-    with:
-      docker: true # optional, set to build/release a Dockerfile
-      helm: true # optional, set to release helm chart
-```
-
-### Gitops Preview + Helm Quality
-
-*.github/workflows/pr.yaml*
-```yaml
-name: pr
-
-on:
-
-  pull_request:
-    branches:
-      - main
-
-jobs:
-
-  helm-quality:
-    uses: CloudNativeEntrepreneur/actions/.github/workflows/helm-quality.yaml@main
-    secrets: inherit
-    with:
-      helm_path: helm
-  
-  preview-helm-quality:
-    uses: CloudNativeEntrepreneur/actions/.github/workflows/helm-quality.yaml@main
-    secrets: inherit
-    with:
-      helm_path: preview/helm
-
-  preview:
-    needs:
-    - helm-quality
-    - preview-helm-quality
-    uses: CloudNativeEntrepreneur/actions/.github/workflows/gitops-preview.yaml@main
-    secrets: inherit
-    with:
-      environment_repository: CloudNativeEntrepreneur/example-preview-envs
-      comment: |
-        Your preview environment has been published! :rocket:
-
-        It may take a few minutes to spin up.
-
-        You can view the Preview contents with `kubectl`:
-
-        ```bash
-        kubectl get ns ${{ github.event.repository.name }}-pr-${{ github.event.pull_request.number }}-preview
-        kubectl get sa -n ${{ github.event.repository.name }}-pr-${{ github.event.pull_request.number }}-preview
-        kubectl get externalsecret -n ${{ github.event.repository.name }}-pr-${{ github.event.pull_request.number }}-preview
-        ```
-```
-
-### Gitops Preview Cleanup
-
-*.github/workflows/pr-close.yaml*
-
-```yaml
-name: pr-close
-on:
-  pull_request:
-    types: [ closed ]
-
-jobs:
-  
-  preview-cleanup:
-    uses: CloudNativeEntrepreneur/actions/.github/workflows/gitops-preview-cleanup.yaml@main
-    secrets: inherit
-    with:
-      environment_repository: CloudNativeEntrepreneur/example-preview-envs
-```
-
-### Gitops Promote - Version Bump
-
-The application must already exist inside of the specified environment repository.
-
-```yaml
-name: promote
-on:
-  push:
-    tags:
-    - v*.*.*
-
-jobs:
-  promote:
-    uses: CloudNativeEntrepreneur/actions/.github/workflows/gitops-promote-version-bump.yaml@main
-    secrets: inherit
-    with:
-      environment_repository: CloudNativeEntrepreneur/example-prod-env
-      pull_request: false # Optional - set to true to create pull request instead of pushing to the default branch
-```
-
-### Gitops Promote - Helm
-
-Create a helm chart at `/promote/helm` in your application that creates the ArgoCD Application.
-
-```yaml
-name: promote
-on:
-  push:
-    tags:
-    - v*.*.*
-
-jobs:
-  promote:
-    uses: CloudNativeEntrepreneur/actions/.github/workflows/gitops-promote-version-bump.yaml@main
-    secrets: inherit
-    with:
-      environment_repository: CloudNativeEntrepreneur/example-prod-env
-      project: example-prod-env
-      pull_request: false # Optional - set to true to create pull request instead of pushing to the default branch
-```
-
-### Node Quality
-
-*.github/workflows/pr.yaml*
-```yaml
-name: Pull Request
-
-on:
-  pull_request:
     branches: [ main ]
+    tags: [ 'v*' ]
 
 jobs:
-
-  quality:
-    uses: CloudNativeEntrepreneur/actions/.github/workflows/node-quality.yaml@main
+  publish:
+    uses: your-org/your-repo/.github/workflows/publish.yaml@main
+    # Optional: provide secrets
+    secrets:
+      docker_password: ${{ secrets.GITHUB_TOKEN }}
 ```
 
-### Node Semantic Release
+### Basic Example
 
-Release an NPM library with semantic-release.
+This example builds and pushes a Docker image using the default Dockerfile in the repository root:
 
-*.github/workflows/release.yaml*
 ```yaml
-name: Release
-
-on:
-  push:
-    branches:
-      - main
-
 jobs:
-  
-  release:
-    uses: CloudNativeEntrepreneur/actions/.github/workflows/node-semantic-release.yaml@main
-    secrets: inherit
+  publish:
+    uses: your-org/your-repo/.github/workflows/publish.yaml@main
 ```
+
+### Multiple Dockerfiles Example
+
+This example builds and pushes multiple Docker images from different Dockerfiles:
+
+```yaml
+jobs:
+  publish:
+    uses: your-org/your-repo/.github/workflows/publish.yaml@main
+    with:
+      dockerfiles: |
+        [
+          {"dockerfile":"./Dockerfile","context":".","prefix":"","postfix":""},
+          {"dockerfile":"./api/Dockerfile","context":"./api","prefix":"api-","postfix":""},
+          {"dockerfile":"./worker/Dockerfile","context":"./worker","prefix":"","postfix":"-worker"}
+        ]
+```
+
+## Inputs
+
+| Input | Description | Required | Default |
+|-------|-------------|----------|---------|
+| `docker_username` | Docker username for registry login | No | `github.actor` |
+| `dockerfiles` | JSON array of objects with dockerfile path, context, prefix and postfix | No | `[{"dockerfile":"./Dockerfile","context":".","prefix":"","postfix":""}]` |
+| `push` | Whether to push the Docker image | No | `true` |
+| `registry` | The container registry to push to | No | `ghcr.io` |
+
+### Dockerfile Configuration
+
+The `dockerfiles` input accepts a JSON array of objects with the following properties:
+
+- `dockerfile`: Path to the Dockerfile (required)
+- `context`: Build context path (defaults to `.`)
+- `prefix`: Prefix for the image name (defaults to `""`)
+- `postfix`: Postfix for the image name (defaults to `""`)
+
+The resulting image name will be: `registry/owner/prefix-reponame-postfix:tag`
+
+## Secrets
+
+| Secret | Description | Required | Default |
+|--------|-------------|----------|---------|
+| `docker_password` | Docker password for registry login | No | `GITHUB_TOKEN` |
+
+## How It Works
+
+The workflow consists of two jobs:
+
+1. **setup**: Processes the `dockerfiles` input to handle simplified specifications
+2. **publish-container**: Builds and pushes Docker images based on the processed configurations
+
+For each Dockerfile configuration, the workflow:
+
+1. Checks out the repository
+2. Sets up QEMU for multi-platform builds
+3. Sets up Docker Buildx
+4. Logs in to the specified container registry
+5. Extracts metadata (tags, labels) for Docker
+6. Logs the configuration details
+7. Builds and optionally pushes the Docker image
+
+## Advanced Usage
+
+### Custom Registry
+
+To push to a custom registry:
+
+```yaml
+jobs:
+  publish:
+    uses: your-org/your-repo/.github/workflows/publish.yaml@main
+    with:
+      registry: docker.io
+      docker_username: ${{ secrets.DOCKERHUB_USERNAME }}
+    secrets:
+      docker_password: ${{ secrets.DOCKERHUB_TOKEN }}
+```
+
+### Build Only (No Push)
+
+To build the image without pushing:
+
+```yaml
+jobs:
+  publish:
+    uses: your-org/your-repo/.github/workflows/publish.yaml@main
+    with:
+      push: false
+```
+
+### Custom Image Naming
+
+The workflow supports customizing image names with prefixes and postfixes:
+
+```yaml
+jobs:
+  publish:
+    uses: your-org/your-repo/.github/workflows/publish.yaml@main
+    with:
+      dockerfiles: |
+        [
+          {"dockerfile":"./Dockerfile","prefix":"service-","postfix":"-backend"}
+        ]
+```
+
+This would result in an image named: `ghcr.io/owner/service-reponame-backend:tag`
+
+## Permissions
+
+The workflow requires the following permissions:
+
+- `packages: write` - For pushing to GitHub Container Registry
+- `contents: write` - For accessing repository contents
+
+These permissions are automatically set in the workflow.
