@@ -44,20 +44,28 @@ jobs:
     - name: Process dockerfiles input
       id: process-dockerfiles
       run: |
-        # Process the input to handle simplified specifications
-        processed=$(node -e '
-          const input = JSON.parse(`${{ inputs.dockerfiles }}`);
-          const processed = input.map(item => {
-            // If only dockerfile is specified, set defaults for other properties
-            return {
-              dockerfile: item.dockerfile,
-              context: item.context || ".",
-              prefix: item.prefix || "",
-              postfix: item.postfix || ""
-            };
-          });
-          console.log(JSON.stringify(processed));
-        ')
+        # Debug: Show the raw input
+        echo "Raw dockerfiles input:"
+        echo '${{ inputs.dockerfiles }}'
+        
+        # Use jq to process the input
+        # This will set default values for missing properties
+        processed=$(echo '${{ inputs.dockerfiles }}' | jq -c '[.[] | {
+          dockerfile: .dockerfile,
+          context: (.context // "."),
+          prefix: (.prefix // ""),
+          postfix: (.postfix // "")
+        }]')
+        
+        # Debug: Show the processed output
+        echo "Processed dockerfiles:"
+        echo "$processed"
+        
+        # Debug: Validate JSON format
+        echo "Validating JSON format..."
+        echo "$processed" | jq . || echo "ERROR: Invalid JSON format"
+        
+        # Set the output for the next job
         echo "processed=${processed}" >> $GITHUB_OUTPUT
 
   # Build and push Docker images

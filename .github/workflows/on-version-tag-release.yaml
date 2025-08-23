@@ -15,7 +15,6 @@ jobs:
     uses: unbounded-tech/workflows-containers/.github/workflows/_test.yaml@main
     with:
       push: true
-    secrets: inherit
 
   release:
     needs: push-test
