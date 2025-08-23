@@ -9,7 +9,6 @@ This workflow automates the process of building Docker images from one or more D
 - Building multiple Docker images in parallel
 - Customizing image names with prefixes and postfixes
 - Automatic tagging based on Git references
-- Multi-platform builds with QEMU
 - Build caching for faster builds
 - Flexible registry configuration
 
@@ -27,10 +26,7 @@ on:
 
 jobs:
   publish:
-    uses: your-org/your-repo/.github/workflows/publish.yaml@main
-    # Optional: provide secrets
-    secrets:
-      docker_password: ${{ secrets.GITHUB_TOKEN }}
+    uses: unbounded-tech/workflows-containers/.github/workflows/publish.yaml@main
 ```
 
 ### Basic Example
@@ -40,7 +36,7 @@ This example builds and pushes a Docker image using the default Dockerfile in th
 ```yaml
 jobs:
   publish:
-    uses: your-org/your-repo/.github/workflows/publish.yaml@main
+    uses: unbounded-tech/workflows-containers/.github/workflows/publish.yaml@main
 ```
 
 ### Multiple Dockerfiles Example
@@ -50,7 +46,7 @@ This example builds and pushes multiple Docker images from different Dockerfiles
 ```yaml
 jobs:
   publish:
-    uses: your-org/your-repo/.github/workflows/publish.yaml@main
+    uses: unbounded-tech/workflows-containers/.github/workflows/publish.yaml@main
     with:
       dockerfiles: |
         [
@@ -112,7 +108,7 @@ To push to a custom registry:
 ```yaml
 jobs:
   publish:
-    uses: your-org/your-repo/.github/workflows/publish.yaml@main
+    uses: unbounded-tech/workflows-containers/.github/workflows/publish.yaml@main
     with:
       registry: docker.io
       docker_username: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -127,7 +123,7 @@ To build the image without pushing:
 ```yaml
 jobs:
   publish:
-    uses: your-org/your-repo/.github/workflows/publish.yaml@main
+    uses: unbounded-tech/workflows-containers/.github/workflows/publish.yaml@main
     with:
       push: false
 ```
@@ -139,7 +135,7 @@ The workflow supports customizing image names with prefixes and postfixes:
 ```yaml
 jobs:
   publish:
-    uses: your-org/your-repo/.github/workflows/publish.yaml@main
+    uses: unbounded-tech/workflows-containers/.github/workflows/publish.yaml@main
     with:
       dockerfiles: |
         [
@@ -147,7 +143,7 @@ jobs:
         ]
 ```
 
-This would result in an image named: `ghcr.io/owner/service-reponame-backend:tag`
+This would result in an image named: `ghcr.io/owner/service-{{ reponame }}-backend:tag`
 
 ## Permissions
 
