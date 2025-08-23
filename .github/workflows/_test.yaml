@@ -1,7 +1,7 @@
 name: Test Containers
 
 on:
-  workflow_dispatch:
+  workflow_call:
     inputs:
       push:
         description: 'Whether to push the Docker image. Default: false'
