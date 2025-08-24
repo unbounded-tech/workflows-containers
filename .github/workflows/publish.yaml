@@ -195,20 +195,19 @@ jobs:
         # Create a file for the comment body
         COMMENT_FILE="comment_body.md"
         
-        # Write the header
-        echo "## Published Container Images" > $COMMENT_FILE
-        echo "" >> $COMMENT_FILE
-        echo "The following container images were published as part of this PR:" >> $COMMENT_FILE
-        echo "" >> $COMMENT_FILE
+        # Debug: Print the raw markdown output
+        echo "Raw markdown output:"
+        echo '${{ needs.publish-container.outputs.image-markdown }}'
         
-        # Simply use the markdown output from the matrix job
-        echo "${{ needs.publish-container.outputs.image-markdown }}" >> $COMMENT_FILE
-        
-        echo "" >> $COMMENT_FILE
-        echo "You can pull these images using:" >> $COMMENT_FILE
-        echo '```bash' >> $COMMENT_FILE
-        echo "docker pull IMAGE_URL:TAG" >> $COMMENT_FILE
-        echo '```' >> $COMMENT_FILE
+        # Write the comment body using heredoc to handle multiline content
+        cat > $COMMENT_FILE << EOL
+        ## Published Container Images
+
+        The following container images were published as part of this PR:
+
+        ${{ needs.publish-container.outputs.image-markdown }}
+
+        EOL
         
         # Debug: Show the final comment body
         echo "Final comment body:"
