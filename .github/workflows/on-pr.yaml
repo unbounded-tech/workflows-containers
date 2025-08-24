@@ -19,4 +19,4 @@ jobs:
           {"dockerfile":"./test/test-1.Dockerfile","context":"./test","prefix":"test1-"},
           {"dockerfile":"./test/test-2.Dockerfile","postfix":"test2"}
         ]
-      push: false
+      push: true
