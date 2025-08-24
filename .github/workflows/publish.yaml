@@ -178,8 +178,16 @@ jobs:
         echo "" >> $COMMENT_FILE
         echo '```' >> $COMMENT_FILE
         
-        # Save tags to a file for processing
-        echo "${{ steps.meta.outputs.tags }}" > tags.txt
+        # Extract just the tag parts from metadata output
+        # The metadata output might include full image references like registry/owner/repo:tag
+        # We just want the tag part (after the last colon)
+        echo "${{ steps.meta.outputs.tags }}" | while read -r full_tag; do
+          if [ -n "$full_tag" ]; then
+            # Extract just the tag part (after the last colon)
+            tag=$(echo "$full_tag" | awk -F: '{print $NF}')
+            echo "$tag" >> pure_tags.txt
+          fi
+        done
         
         # Loop through all the dockerfiles from the input
         echo '${{ inputs.dockerfiles }}' | jq -c '.[]' | while read -r config; do
@@ -195,7 +203,7 @@ jobs:
             if [ -n "$tag" ]; then
               echo "$image_name:$tag" >> $COMMENT_FILE
             fi
-          done < tags.txt
+          done < pure_tags.txt
         done
         
         echo '```' >> $COMMENT_FILE
