@@ -169,14 +169,14 @@ jobs:
         cat $MARKDOWN_FILE
         
         # Save the markdown file for artifact upload
-        cp $MARKDOWN_FILE /tmp/markdown_output_${{ matrix.config.prefix }}${{ steps.lowercase.outputs.repo }}${{ matrix.config.postfix }}.md
+        cp $MARKDOWN_FILE /tmp/${{ matrix.config.prefix }}${{ steps.lowercase.outputs.repo }}${{ matrix.config.postfix }}.md
 
     - name: Upload Markdown Artifact
       if: github.event_name == 'pull_request' && inputs.push
       uses: actions/upload-artifact@v4
       with:
-        name: markdown-outputs
-        path: /tmp/markdown_output_*.md
+        name: ${{ matrix.config.prefix }}${{ steps.lowercase.outputs.repo }}${{ matrix.config.postfix }}.md
+        path: /tmp/${{ matrix.config.prefix }}${{ steps.lowercase.outputs.repo }}${{ matrix.config.postfix }}.md
         retention-days: 1
 
   # Add PR comment with published images
@@ -188,11 +188,12 @@ jobs:
       pull-requests: write
     
     steps:
-    - name: Download Markdown Artifacts
+    - name: Download All Markdown Artifacts
       uses: actions/download-artifact@v4
       with:
-        name: markdown-outputs
+        pattern: '*.md'
         path: /tmp/markdown-outputs
+        merge-multiple: true
     - name: Set lowercase names
       id: lowercase
       run: |
@@ -205,13 +206,13 @@ jobs:
         # Create a file for the comment body
         COMMENT_FILE="comment_body.md"
         
-        # Debug: List the markdown files
-        echo "Available markdown files:"
-        ls -la /tmp/markdown-outputs/
+        # Debug: List the downloaded artifacts and their structure
+        echo "Available artifacts and structure:"
+        find /tmp/markdown-outputs -type f | sort
         
         # Combine all markdown files into one
         COMBINED_MARKDOWN=""
-        for file in /tmp/markdown-outputs/*.md; do
+        for file in $(find /tmp/markdown-outputs -type f | sort); do
           echo "Processing file: $file"
           COMBINED_MARKDOWN+="$(cat $file)"$'\n\n'
         done
