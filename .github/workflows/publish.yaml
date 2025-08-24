@@ -11,10 +11,29 @@ on:
         default: ''
 
       dockerfiles:
-        description: 'JSON array of objects with dockerfile path, context, prefix and postfix. Format: [{"dockerfile":"path/to/Dockerfile","context":"path/to/context","prefix":"","postfix":""}]. Results in image name: ghcr.io/ORG/prefix-{{ reponame }}-postfix:{{ tag }}. Default: [{"dockerfile":"./Dockerfile","context":".","prefix":"","postfix":""}]'
+        description: |
+          YAML array of objects with dockerfile path, context, prefix and postfix. 
+          
+          Format: |-
+            - dockerfile: path/to/Dockerfile
+              context: path/to/context
+              prefix: ""
+              postfix: ""
+          
+          Results in image name: ghcr.io/ORG/{{ prefix }}-{{ reponame }}-{{ postfix }}:{{ tag }}. 
+          
+          Default: |-
+            - dockerfile: ./Dockerfile
+              context: .
+              prefix: ""
+              postfix: ""
         required: false
         type: string
-        default: '[{"dockerfile":"./Dockerfile","context":".","prefix":"","postfix":""}]'
+        default: |-
+          - dockerfile: ./Dockerfile
+            context: .
+            prefix: ""
+            postfix: ""
 
       push:
         description: 'Whether to push the Docker image. Default: true'
@@ -48,9 +67,9 @@ jobs:
         echo "Raw dockerfiles input:"
         echo '${{ inputs.dockerfiles }}'
         
-        # Use jq to process the input
+        # Use yq to process the input
         # This will set default values for missing properties
-        processed=$(echo '${{ inputs.dockerfiles }}' | jq -c '[.[] | {
+        processed=$(echo '${{ inputs.dockerfiles }}' | yq eval -o=json '[.[] | {
           dockerfile: .dockerfile,
           context: (.context // "."),
           prefix: (.prefix // ""),
@@ -63,7 +82,7 @@ jobs:
         
         # Debug: Validate JSON format
         echo "Validating JSON format..."
-        echo "$processed" | jq . || echo "ERROR: Invalid JSON format"
+        echo "$processed" | yq eval -P || echo "ERROR: Invalid JSON format"
         
         # Set the output for the next job
         echo "processed=${processed}" >> $GITHUB_OUTPUT
