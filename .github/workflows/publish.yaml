@@ -73,7 +73,7 @@ jobs:
     needs: setup
     runs-on: ubuntu-latest
     outputs:
-      matrix-tags: ${{ steps.set-matrix-outputs.outputs.all_tags }}
+      published-tags: ${{ steps.set-matrix-outputs.outputs.all_tags }}
     strategy:
       matrix:
         config: ${{ fromJson(needs.setup.outputs.processed_dockerfiles) }}
@@ -147,15 +147,26 @@ jobs:
       run: |
         # Save the tags to a file with a unique name based on the matrix index
         echo "${{ steps.meta.outputs.tags }}" > /tmp/tags_${{ strategy.job-index }}
+
+        cat /tmp/tags_${{ strategy.job-index }}
         
         # Create a JSON string with the tags
         tags_json=$(echo "${{ steps.meta.outputs.tags }}" | jq -R -s -c 'split("\n") | map(select(length > 0))')
+        echo "TAGS: $tags_json"
         echo "tags=$tags_json" >> $GITHUB_OUTPUT
 
     - name: Set Matrix Outputs
       if: github.event_name == 'pull_request' && inputs.push
       id: set-matrix-outputs
       run: |
+        # Debug: Print matrix info
+        echo "Matrix job index: ${{ strategy.job-index }}"
+        echo "Matrix config: ${{ toJSON(matrix.config) }}"
+        
+        # Debug: Print saved tags
+        echo "Tags from this matrix item:"
+        echo "${{ steps.save-tags.outputs.tags }}"
+        
         # Combine all tags from all matrix items
         # This is a workaround since GitHub Actions doesn't directly support matrix outputs
         # We're using a job output that will be overwritten by each matrix item, but the last one will contain all tags
@@ -164,15 +175,24 @@ jobs:
         if [ -f /tmp/all_tags.json ]; then
           # Read existing tags
           existing_tags=$(cat /tmp/all_tags.json)
+          echo "Existing tags from file:"
+          echo "$existing_tags"
+          
           # Append new tags
           echo "$existing_tags" | jq -c ". + ${{ steps.save-tags.outputs.tags }}" > /tmp/all_tags.json
+          echo "Combined tags:"
+          cat /tmp/all_tags.json
         else
           # Create new file with tags
           echo "${{ steps.save-tags.outputs.tags }}" > /tmp/all_tags.json
+          echo "Initial tags saved to file:"
+          cat /tmp/all_tags.json
         fi
         
         # Set the output
         echo "all_tags=$(cat /tmp/all_tags.json)" >> $GITHUB_OUTPUT
+        echo "Final output value:"
+        echo "$(cat /tmp/all_tags.json)"
 
   # Add PR comment with published images
   pr-comment:
@@ -192,6 +212,10 @@ jobs:
     - name: Generate Comment Body
       id: comment-body
       run: |
+        # Debug: Print the published-tags output
+        echo "Published tags output received:"
+        echo '${{ needs.publish-container.outputs.published-tags }}'
+        
         # Create a file for the comment body
         COMMENT_FILE="comment_body.md"
         
@@ -202,12 +226,24 @@ jobs:
         echo "" >> $COMMENT_FILE
         echo '```' >> $COMMENT_FILE
         
+        # Debug: Try to parse the JSON
+        echo "Attempting to parse JSON:"
+        echo '${{ needs.publish-container.outputs.published-tags }}' | jq .
+        
         # Parse the JSON array of tags from the matrix job
-        echo '${{ needs.publish-container.outputs.matrix-tags }}' | jq -r '.[]' | while read -r tag; do
-          if [ -n "$tag" ]; then
-            echo "$tag" >> $COMMENT_FILE
-          fi
-        done
+        # Add error handling
+        if echo '${{ needs.publish-container.outputs.published-tags }}' | jq -e . > /dev/null 2>&1; then
+          echo "Valid JSON received, parsing tags..."
+          echo '${{ needs.publish-container.outputs.published-tags }}' | jq -r '.[]' | while read -r tag; do
+            if [ -n "$tag" ]; then
+              echo "Adding tag: $tag"
+              echo "$tag" >> $COMMENT_FILE
+            fi
+          done
+        else
+          echo "Invalid JSON received, using raw output..."
+          echo "Raw output: ${{ needs.publish-container.outputs.published-tags }}" >> $COMMENT_FILE
+        fi
         
         echo '```' >> $COMMENT_FILE
         
@@ -216,6 +252,10 @@ jobs:
         echo '```bash' >> $COMMENT_FILE
         echo "docker pull IMAGE_URL:TAG" >> $COMMENT_FILE
         echo '```' >> $COMMENT_FILE
+        
+        # Debug: Show the final comment body
+        echo "Final comment body:"
+        cat $COMMENT_FILE
         
         # Set the output to the file content
         body=$(cat $COMMENT_FILE)
