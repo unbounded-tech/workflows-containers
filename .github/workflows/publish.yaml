@@ -37,6 +37,8 @@ jobs:
   # Process the dockerfiles input to handle simplified specifications
   setup:
     runs-on: ubuntu-latest
+    outputs:
+      processed_dockerfiles: ${{ steps.process-dockerfiles.outputs.processed }}
     steps:
     - name: Process dockerfiles input
       id: process-dockerfiles
@@ -65,14 +67,13 @@ jobs:
         # Set the output for the next job
         echo "processed=${processed}" >> $GITHUB_OUTPUT
 
-    outputs:
-      processed_dockerfiles: ${{ steps.process-dockerfiles.outputs.processed }}
 
   # Build and push Docker images
   publish-container:
     needs: setup
     runs-on: ubuntu-latest
-    
+    outputs:
+      image-markdown: ${{ steps.publish-output.outputs.markdown }}
     strategy:
       matrix:
         config: ${{ fromJson(needs.setup.outputs.processed_dockerfiles) }}
@@ -140,61 +141,39 @@ jobs:
         cache-from: type=registry,ref=${{ inputs.registry }}/${{ steps.lowercase.outputs.owner }}/${{ matrix.config.prefix }}${{ steps.lowercase.outputs.repo }}${{ matrix.config.postfix }}:buildcache
         cache-to: type=registry,ref=${{ inputs.registry }}/${{ steps.lowercase.outputs.owner }}/${{ matrix.config.prefix }}${{ steps.lowercase.outputs.repo }}${{ matrix.config.postfix }}:buildcache,mode=max
 
-    - name: Save Tags to Output
+    - name: Format Markdown Output
       if: github.event_name == 'pull_request' && inputs.push
-      id: save-tags
+      id: publish-output
       run: |
-        # Save the tags to a file with a unique name based on the matrix index
-        echo "${{ steps.meta.outputs.tags }}" > /tmp/tags_${{ strategy.job-index }}
-
-        cat /tmp/tags_${{ strategy.job-index }}
+        # Get the image name without tags
+        IMAGE_NAME="${{ inputs.registry }}/${{ steps.lowercase.outputs.owner }}/${{ matrix.config.prefix }}${{ steps.lowercase.outputs.repo }}${{ matrix.config.postfix }}"
         
-        # Create a JSON string with the tags
-        tags_json=$(echo "${{ steps.meta.outputs.tags }}" | jq -R -s -c 'split("\n") | map(select(length > 0))')
-        echo "TAGS: $tags_json"
-        echo "tags=$tags_json" >> $GITHUB_OUTPUT
-
-    - name: Set Matrix Outputs
-      if: github.event_name == 'pull_request' && inputs.push
-      id: set-matrix-outputs
-      run: |
-        # Debug: Print matrix info
-        echo "Matrix job index: ${{ strategy.job-index }}"
-        echo "Matrix config: ${{ toJSON(matrix.config) }}"
+        # Create a markdown block for this image
+        echo "Creating markdown for: $IMAGE_NAME"
         
-        # Debug: Print saved tags
-        echo "Tags from this matrix item:"
-        echo "${{ steps.save-tags.outputs.tags }}"
+        # Create a file for the markdown content
+        MARKDOWN_FILE="/tmp/markdown_${{ strategy.job-index }}"
         
-        # Combine all tags from all matrix items
-        # This is a workaround since GitHub Actions doesn't directly support matrix outputs
-        # We're using a job output that will be overwritten by each matrix item, but the last one will contain all tags
+        # Write the markdown content
+        echo "###### ${{ steps.lowercase.outputs.owner }}/${{ matrix.config.prefix }}${{ steps.lowercase.outputs.repo }}${{ matrix.config.postfix }}" > $MARKDOWN_FILE
+        echo "" >> $MARKDOWN_FILE
+        echo '```' >> $MARKDOWN_FILE
+        echo "${{ steps.meta.outputs.tags }}" >> $MARKDOWN_FILE
+        echo '```' >> $MARKDOWN_FILE
+        echo "" >> $MARKDOWN_FILE
+        echo "[View Package](https://github.com/${{ steps.lowercase.outputs.owner }}/workflows-containers/pkgs/container/${{ matrix.config.prefix }}${{ steps.lowercase.outputs.repo }}${{ matrix.config.postfix }})" >> $MARKDOWN_FILE
+        echo "" >> $MARKDOWN_FILE
         
-        # Create or append to the all_tags file
-        if [ -f /tmp/all_tags.json ]; then
-          # Read existing tags
-          existing_tags=$(cat /tmp/all_tags.json)
-          echo "Existing tags from file:"
-          echo "$existing_tags"
-          
-          # Append new tags
-          echo "$existing_tags" | jq -c ". + ${{ steps.save-tags.outputs.tags }}" > /tmp/all_tags.json
-          echo "Combined tags:"
-          cat /tmp/all_tags.json
-        else
-          # Create new file with tags
-          echo "${{ steps.save-tags.outputs.tags }}" > /tmp/all_tags.json
-          echo "Initial tags saved to file:"
-          cat /tmp/all_tags.json
-        fi
+        # Debug: Show the markdown content
+        echo "Markdown content:"
+        cat $MARKDOWN_FILE
         
         # Set the output
-        echo "all_tags=$(cat /tmp/all_tags.json)" >> $GITHUB_OUTPUT
-        echo "Final output value:"
-        echo "$(cat /tmp/all_tags.json)"
+        markdown=$(cat $MARKDOWN_FILE)
+        echo "markdown<<EOF" >> $GITHUB_OUTPUT
+        echo "$markdown" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
 
-    outputs:
-      published-tags: ${{ steps.set-matrix-outputs.outputs.all_tags }}
   # Add PR comment with published images
   pr-comment:
     needs: publish-container
@@ -213,10 +192,6 @@ jobs:
     - name: Generate Comment Body
       id: comment-body
       run: |
-        # Debug: Print the published-tags output
-        echo "Published tags output received:"
-        echo '${{ needs.publish-container.outputs.published-tags }}'
-        
         # Create a file for the comment body
         COMMENT_FILE="comment_body.md"
         
@@ -225,28 +200,9 @@ jobs:
         echo "" >> $COMMENT_FILE
         echo "The following container images were published as part of this PR:" >> $COMMENT_FILE
         echo "" >> $COMMENT_FILE
-        echo '```' >> $COMMENT_FILE
         
-        # Debug: Try to parse the JSON
-        echo "Attempting to parse JSON:"
-        echo '${{ needs.publish-container.outputs.published-tags }}' | jq .
-        
-        # Parse the JSON array of tags from the matrix job
-        # Add error handling
-        if echo '${{ needs.publish-container.outputs.published-tags }}' | jq -e . > /dev/null 2>&1; then
-          echo "Valid JSON received, parsing tags..."
-          echo '${{ needs.publish-container.outputs.published-tags }}' | jq -r '.[]' | while read -r tag; do
-            if [ -n "$tag" ]; then
-              echo "Adding tag: $tag"
-              echo "$tag" >> $COMMENT_FILE
-            fi
-          done
-        else
-          echo "Invalid JSON received, using raw output..."
-          echo "Raw output: ${{ needs.publish-container.outputs.published-tags }}" >> $COMMENT_FILE
-        fi
-        
-        echo '```' >> $COMMENT_FILE
+        # Simply use the markdown output from the matrix job
+        echo "${{ needs.publish-container.outputs.image-markdown }}" >> $COMMENT_FILE
         
         echo "" >> $COMMENT_FILE
         echo "You can pull these images using:" >> $COMMENT_FILE
