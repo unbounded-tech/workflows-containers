@@ -154,15 +154,17 @@ jobs:
         # Create a file for the markdown content
         MARKDOWN_FILE="/tmp/markdown_${{ strategy.job-index }}"
         
-        # Write the markdown content
-        echo "###### ${{ steps.lowercase.outputs.owner }}/${{ matrix.config.prefix }}${{ steps.lowercase.outputs.repo }}${{ matrix.config.postfix }}" > $MARKDOWN_FILE
-        echo "" >> $MARKDOWN_FILE
-        echo '```' >> $MARKDOWN_FILE
-        echo "${{ steps.meta.outputs.tags }}" >> $MARKDOWN_FILE
-        echo '```' >> $MARKDOWN_FILE
-        echo "" >> $MARKDOWN_FILE
-        echo "[View Package](https://github.com/${{ steps.lowercase.outputs.owner }}/workflows-containers/pkgs/container/${{ matrix.config.prefix }}${{ steps.lowercase.outputs.repo }}${{ matrix.config.postfix }})" >> $MARKDOWN_FILE
-        echo "" >> $MARKDOWN_FILE
+        # Write the markdown content using heredoc for simplicity
+        cat > $MARKDOWN_FILE << EOL
+        ###### ${{ steps.lowercase.outputs.owner }}/${{ matrix.config.prefix }}${{ steps.lowercase.outputs.repo }}${{ matrix.config.postfix }}
+
+        \`\`\`
+        ${{ steps.meta.outputs.tags }}
+        \`\`\`
+
+        [View Package](https://github.com/${{ steps.lowercase.outputs.owner }}/workflows-containers/pkgs/container/${{ matrix.config.prefix }}${{ steps.lowercase.outputs.repo }}${{ matrix.config.postfix }})
+
+        EOL
         
         # Debug: Show the markdown content
         echo "Markdown content:"
