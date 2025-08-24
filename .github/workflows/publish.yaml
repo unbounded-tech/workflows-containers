@@ -72,8 +72,6 @@ jobs:
   publish-container:
     needs: setup
     runs-on: ubuntu-latest
-    outputs:
-      image-markdown: ${{ steps.publish-output.outputs.markdown }}
     strategy:
       matrix:
         config: ${{ fromJson(needs.setup.outputs.processed_dockerfiles) }}
@@ -170,11 +168,16 @@ jobs:
         echo "Markdown content:"
         cat $MARKDOWN_FILE
         
-        # Set the output
-        markdown=$(cat $MARKDOWN_FILE)
-        echo "markdown<<EOF" >> $GITHUB_OUTPUT
-        echo "$markdown" >> $GITHUB_OUTPUT
-        echo "EOF" >> $GITHUB_OUTPUT
+        # Save the markdown file for artifact upload
+        cp $MARKDOWN_FILE /tmp/markdown_output_${{ matrix.config.prefix }}${{ steps.lowercase.outputs.repo }}${{ matrix.config.postfix }}.md
+
+    - name: Upload Markdown Artifact
+      if: github.event_name == 'pull_request' && inputs.push
+      uses: actions/upload-artifact@v4
+      with:
+        name: markdown-outputs
+        path: /tmp/markdown_output_*.md
+        retention-days: 1
 
   # Add PR comment with published images
   pr-comment:
@@ -185,6 +188,11 @@ jobs:
       pull-requests: write
     
     steps:
+    - name: Download Markdown Artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: markdown-outputs
+        path: /tmp/markdown-outputs
     - name: Set lowercase names
       id: lowercase
       run: |
@@ -197,9 +205,16 @@ jobs:
         # Create a file for the comment body
         COMMENT_FILE="comment_body.md"
         
-        # Debug: Print the raw markdown output
-        echo "Raw markdown output:"
-        echo '${{ needs.publish-container.outputs.image-markdown }}'
+        # Debug: List the markdown files
+        echo "Available markdown files:"
+        ls -la /tmp/markdown-outputs/
+        
+        # Combine all markdown files into one
+        COMBINED_MARKDOWN=""
+        for file in /tmp/markdown-outputs/*.md; do
+          echo "Processing file: $file"
+          COMBINED_MARKDOWN+="$(cat $file)"$'\n\n'
+        done
         
         # Write the comment body using heredoc to handle multiline content
         cat > $COMMENT_FILE << EOL
@@ -207,8 +222,7 @@ jobs:
 
         The following container images were published as part of this PR:
 
-        ${{ needs.publish-container.outputs.image-markdown }}
-
+        $COMBINED_MARKDOWN
         EOL
         
         # Debug: Show the final comment body
