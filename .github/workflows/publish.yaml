@@ -108,6 +108,13 @@ jobs:
       uses: docker/metadata-action@v5
       with:
         images: ${{ inputs.registry }}/${{ steps.lowercase.outputs.owner }}/${{ matrix.config.prefix }}${{ steps.lowercase.outputs.repo }}${{ matrix.config.postfix }}
+        tags: |
+          type=schedule
+          type=ref,event=branch
+          type=ref,event=tag
+          type=ref,event=pr
+          type=raw,value=pr-${{ github.event.pull_request.number }}-${{ github.sha }},event=pr
+          type=sha
 
     - name: Log configuration
       run: |

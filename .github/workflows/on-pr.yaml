@@ -12,7 +12,7 @@ permissions:
 jobs:
   build-and-publish:
     name: Build Test
-    uses: unbounded-tech/workflows-containers/.github/workflows/publish.yaml@main
+    uses: unbounded-tech/workflows-containers/.github/workflows/publish.yaml@feat/pr
     with:
       dockerfiles: |
         [
