@@ -138,3 +138,95 @@ jobs:
         labels: ${{ steps.meta.outputs.labels }}
         cache-from: type=registry,ref=${{ inputs.registry }}/${{ steps.lowercase.outputs.owner }}/${{ matrix.config.prefix }}${{ steps.lowercase.outputs.repo }}${{ matrix.config.postfix }}:buildcache
         cache-to: type=registry,ref=${{ inputs.registry }}/${{ steps.lowercase.outputs.owner }}/${{ matrix.config.prefix }}${{ steps.lowercase.outputs.repo }}${{ matrix.config.postfix }}:buildcache,mode=max
+
+  # Add PR comment with published images
+  pr-comment:
+    needs: publish-container
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && inputs.push
+    permissions:
+      pull-requests: write
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v5
+      
+    - name: Set lowercase names
+      id: lowercase
+      run: |
+        echo "owner=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+        echo "repo=$(echo ${{ github.event.repository.name }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
+    - name: Extract metadata (tags, labels) for Docker
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ inputs.registry }}/${{ steps.lowercase.outputs.owner }}/${{ steps.lowercase.outputs.repo }}
+        tags: |
+          type=ref,event=tag
+          type=ref,event=pr
+          type=raw,value=pr-${{ github.event.pull_request.number }}-${{ github.sha }},event=pr
+          type=sha
+
+    - name: Generate Comment Body
+      id: comment-body
+      run: |
+        # Create a file for the comment body
+        COMMENT_FILE="comment_body.md"
+        
+        # Write the header
+        echo "## Published Container Images" > $COMMENT_FILE
+        echo "" >> $COMMENT_FILE
+        echo "The following container images were published as part of this PR:" >> $COMMENT_FILE
+        echo "" >> $COMMENT_FILE
+        echo '```' >> $COMMENT_FILE
+        
+        # Save tags to a file for processing
+        echo "${{ steps.meta.outputs.tags }}" > tags.txt
+        
+        # Loop through all the dockerfiles from the input
+        echo '${{ inputs.dockerfiles }}' | jq -c '.[]' | while read -r config; do
+          # Extract values from the config
+          prefix=$(echo $config | jq -r '.prefix // ""')
+          postfix=$(echo $config | jq -r '.postfix // ""')
+          
+          # Construct the image name
+          image_name="${{ inputs.registry }}/${{ steps.lowercase.outputs.owner }}/$prefix${{ steps.lowercase.outputs.repo }}$postfix"
+          
+          # For each tag, output the full image:tag reference
+          while read -r tag; do
+            if [ -n "$tag" ]; then
+              echo "$image_name:$tag" >> $COMMENT_FILE
+            fi
+          done < tags.txt
+        done
+        
+        echo '```' >> $COMMENT_FILE
+        
+        echo "" >> $COMMENT_FILE
+        echo "You can pull these images using:" >> $COMMENT_FILE
+        echo '```bash' >> $COMMENT_FILE
+        echo "docker pull IMAGE_URL:TAG" >> $COMMENT_FILE
+        echo '```' >> $COMMENT_FILE
+        
+        # Set the output to the file content
+        body=$(cat $COMMENT_FILE)
+        echo "body<<EOF" >> $GITHUB_OUTPUT
+        echo "$body" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+
+    - name: Find Comment
+      uses: peter-evans/find-comment@v3
+      id: fc
+      with:
+        issue-number: ${{ github.event.pull_request.number }}
+        comment-author: 'github-actions[bot]'
+        body-includes: Published Container Images
+
+    - name: Create or update comment
+      uses: peter-evans/create-or-update-comment@v4
+      with:
+        comment-id: ${{ steps.fc.outputs.comment-id }}
+        issue-number: ${{ github.event.pull_request.number }}
+        body: ${{ steps.comment-body.outputs.body }}
+        edit-mode: replace
