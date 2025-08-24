@@ -39,7 +39,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       processed_dockerfiles: ${{ steps.process-dockerfiles.outputs.processed }}
-    
     steps:
     - name: Process dockerfiles input
       id: process-dockerfiles
@@ -68,6 +67,7 @@ jobs:
         # Set the output for the next job
         echo "processed=${processed}" >> $GITHUB_OUTPUT
 
+
   # Build and push Docker images
   publish-container:
     needs: setup
@@ -78,7 +78,7 @@ jobs:
 
     permissions:
       packages: write
-      contents: write
+      contents: read
 
     steps:
     - name: Checkout
@@ -108,6 +108,12 @@ jobs:
       uses: docker/metadata-action@v5
       with:
         images: ${{ inputs.registry }}/${{ steps.lowercase.outputs.owner }}/${{ matrix.config.prefix }}${{ steps.lowercase.outputs.repo }}${{ matrix.config.postfix }}
+        tags: |
+          type=ref,event=tag
+          type=ref,event=pr
+          type=raw,value=pr-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }},event=pr
+        labels: |
+          org.opencontainers.image.title=${{ matrix.config.prefix }}${{ steps.lowercase.outputs.repo }}${{ matrix.config.postfix }}
 
     - name: Log configuration
       run: |
@@ -133,3 +139,116 @@ jobs:
         labels: ${{ steps.meta.outputs.labels }}
         cache-from: type=registry,ref=${{ inputs.registry }}/${{ steps.lowercase.outputs.owner }}/${{ matrix.config.prefix }}${{ steps.lowercase.outputs.repo }}${{ matrix.config.postfix }}:buildcache
         cache-to: type=registry,ref=${{ inputs.registry }}/${{ steps.lowercase.outputs.owner }}/${{ matrix.config.prefix }}${{ steps.lowercase.outputs.repo }}${{ matrix.config.postfix }}:buildcache,mode=max
+
+    - name: Format Markdown Output
+      if: github.event_name == 'pull_request' && inputs.push
+      id: publish-output
+      run: |
+        # Get the image name without tags
+        IMAGE_NAME="${{ inputs.registry }}/${{ steps.lowercase.outputs.owner }}/${{ matrix.config.prefix }}${{ steps.lowercase.outputs.repo }}${{ matrix.config.postfix }}"
+        
+        # Create a markdown block for this image
+        echo "Creating markdown for: $IMAGE_NAME"
+        
+        # Create a file for the markdown content
+        MARKDOWN_FILE="/tmp/markdown_${{ strategy.job-index }}"
+        
+        # Write the markdown content using heredoc for simplicity
+        cat > $MARKDOWN_FILE << EOL
+        #### ${{ steps.lowercase.outputs.owner }}/${{ matrix.config.prefix }}${{ steps.lowercase.outputs.repo }}${{ matrix.config.postfix }}
+
+        \`\`\`
+        ${{ steps.meta.outputs.tags }}
+        \`\`\`
+
+        [View Package](https://github.com/${{ steps.lowercase.outputs.owner }}/workflows-containers/pkgs/container/${{ matrix.config.prefix }}${{ steps.lowercase.outputs.repo }}${{ matrix.config.postfix }})
+
+        EOL
+        
+        # Debug: Show the markdown content
+        echo "Markdown content:"
+        cat $MARKDOWN_FILE
+        
+        # Save the markdown file for artifact upload
+        cp $MARKDOWN_FILE /tmp/${{ matrix.config.prefix }}${{ steps.lowercase.outputs.repo }}${{ matrix.config.postfix }}.md
+
+    - name: Upload Markdown Artifact
+      if: github.event_name == 'pull_request' && inputs.push
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.config.prefix }}${{ steps.lowercase.outputs.repo }}${{ matrix.config.postfix }}.md
+        path: /tmp/${{ matrix.config.prefix }}${{ steps.lowercase.outputs.repo }}${{ matrix.config.postfix }}.md
+        retention-days: 1
+
+  # Add PR comment with published images
+  pr-comment:
+    needs: publish-container
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && inputs.push
+    permissions:
+      pull-requests: write
+    
+    steps:
+    - name: Download All Markdown Artifacts
+      uses: actions/download-artifact@v5
+      with:
+        pattern: '*.md'
+        path: /tmp/markdown-outputs
+        merge-multiple: true
+    - name: Set lowercase names
+      id: lowercase
+      run: |
+        echo "owner=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+        echo "repo=$(echo ${{ github.event.repository.name }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
+    - name: Generate Comment Body
+      id: comment-body
+      run: |
+        # Create a file for the comment body
+        COMMENT_FILE="comment_body.md"
+        
+        # Debug: List the downloaded artifacts and their structure
+        echo "Available artifacts and structure:"
+        find /tmp/markdown-outputs -type f | sort
+        
+        # Combine all markdown files into one
+        COMBINED_MARKDOWN=""
+        for file in $(find /tmp/markdown-outputs -type f | sort); do
+          echo "Processing file: $file"
+          COMBINED_MARKDOWN+="$(cat $file)"$'\n\n'
+        done
+        
+        # Write the comment body using heredoc to handle multiline content
+        cat > $COMMENT_FILE << EOL
+        ## Published Container Images
+
+        The following container images were published as part of this PR:
+
+        $COMBINED_MARKDOWN
+        EOL
+        
+        # Debug: Show the final comment body
+        echo "Final comment body:"
+        cat $COMMENT_FILE
+        
+        # Set the output to the file content
+        body=$(cat $COMMENT_FILE)
+        echo "body<<EOF" >> $GITHUB_OUTPUT
+        echo "$body" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+
+    - name: Find Comment
+      uses: peter-evans/find-comment@v3
+      id: fc
+      with:
+        issue-number: ${{ github.event.pull_request.number }}
+        comment-author: 'github-actions[bot]'
+        body-includes: Published Container Images
+
+    - name: Create or update comment
+      uses: peter-evans/create-or-update-comment@v4
+      with:
+        comment-id: ${{ steps.fc.outputs.comment-id }}
+        issue-number: ${{ github.event.pull_request.number }}
+        body: ${{ steps.comment-body.outputs.body }}
+        edit-mode: replace
