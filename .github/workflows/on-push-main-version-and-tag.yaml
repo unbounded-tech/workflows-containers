@@ -24,7 +24,7 @@ jobs:
   version-and-tag:
     needs: build-test
     name: Version and Tag
-    uses: unbounded-tech/workflow-vnext-tag/.github/workflows/workflow.yaml@v1.17.4
+    uses: unbounded-tech/workflow-vnext-tag/.github/workflows/workflow.yaml@v1.18.0
     secrets: inherit
     with:
       useDeployKey: true
