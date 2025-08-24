@@ -112,7 +112,6 @@ jobs:
           type=ref,event=tag
           type=ref,event=pr
           type=raw,value=pr-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }},event=pr
-          type=sha
 
     - name: Log configuration
       run: |
