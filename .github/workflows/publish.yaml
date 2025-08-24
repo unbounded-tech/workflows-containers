@@ -37,9 +37,6 @@ jobs:
   # Process the dockerfiles input to handle simplified specifications
   setup:
     runs-on: ubuntu-latest
-    outputs:
-      processed_dockerfiles: ${{ steps.process-dockerfiles.outputs.processed }}
-    
     steps:
     - name: Process dockerfiles input
       id: process-dockerfiles
@@ -68,12 +65,14 @@ jobs:
         # Set the output for the next job
         echo "processed=${processed}" >> $GITHUB_OUTPUT
 
+    outputs:
+      processed_dockerfiles: ${{ steps.process-dockerfiles.outputs.processed }}
+
   # Build and push Docker images
   publish-container:
     needs: setup
     runs-on: ubuntu-latest
-    outputs:
-      published-tags: ${{ steps.set-matrix-outputs.outputs.all_tags }}
+    
     strategy:
       matrix:
         config: ${{ fromJson(needs.setup.outputs.processed_dockerfiles) }}
@@ -194,6 +193,8 @@ jobs:
         echo "Final output value:"
         echo "$(cat /tmp/all_tags.json)"
 
+    outputs:
+      published-tags: ${{ steps.set-matrix-outputs.outputs.all_tags }}
   # Add PR comment with published images
   pr-comment:
     needs: publish-container
