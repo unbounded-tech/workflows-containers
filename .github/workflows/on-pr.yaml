@@ -15,9 +15,8 @@ jobs:
     uses: unbounded-tech/workflows-containers/.github/workflows/publish.yaml@feat/pr
     with:
       dockerfiles: |
-        - dockerfile: ./test/test-1.Dockerfile
-          context: ./test
-          prefix: test1-
-        - dockerfile: ./test/test-2.Dockerfile
-          postfix: test2
+        [
+          {"dockerfile":"./test/test-1.Dockerfile","context":"./test","prefix":"test1-"},
+          {"dockerfile":"./test/test-2.Dockerfile","postfix":"test2"}
+        ]
       push: true
