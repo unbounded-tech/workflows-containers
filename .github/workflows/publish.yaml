@@ -72,6 +72,8 @@ jobs:
   publish-container:
     needs: setup
     runs-on: ubuntu-latest
+    outputs:
+      matrix-tags: ${{ steps.set-matrix-outputs.outputs.all_tags }}
     strategy:
       matrix:
         config: ${{ fromJson(needs.setup.outputs.processed_dockerfiles) }}
@@ -139,6 +141,39 @@ jobs:
         cache-from: type=registry,ref=${{ inputs.registry }}/${{ steps.lowercase.outputs.owner }}/${{ matrix.config.prefix }}${{ steps.lowercase.outputs.repo }}${{ matrix.config.postfix }}:buildcache
         cache-to: type=registry,ref=${{ inputs.registry }}/${{ steps.lowercase.outputs.owner }}/${{ matrix.config.prefix }}${{ steps.lowercase.outputs.repo }}${{ matrix.config.postfix }}:buildcache,mode=max
 
+    - name: Save Tags to Output
+      if: github.event_name == 'pull_request' && inputs.push
+      id: save-tags
+      run: |
+        # Save the tags to a file with a unique name based on the matrix index
+        echo "${{ steps.meta.outputs.tags }}" > /tmp/tags_${{ strategy.job-index }}
+        
+        # Create a JSON string with the tags
+        tags_json=$(echo "${{ steps.meta.outputs.tags }}" | jq -R -s -c 'split("\n") | map(select(length > 0))')
+        echo "tags=$tags_json" >> $GITHUB_OUTPUT
+
+    - name: Set Matrix Outputs
+      if: github.event_name == 'pull_request' && inputs.push
+      id: set-matrix-outputs
+      run: |
+        # Combine all tags from all matrix items
+        # This is a workaround since GitHub Actions doesn't directly support matrix outputs
+        # We're using a job output that will be overwritten by each matrix item, but the last one will contain all tags
+        
+        # Create or append to the all_tags file
+        if [ -f /tmp/all_tags.json ]; then
+          # Read existing tags
+          existing_tags=$(cat /tmp/all_tags.json)
+          # Append new tags
+          echo "$existing_tags" | jq -c ". + ${{ steps.save-tags.outputs.tags }}" > /tmp/all_tags.json
+        else
+          # Create new file with tags
+          echo "${{ steps.save-tags.outputs.tags }}" > /tmp/all_tags.json
+        fi
+        
+        # Set the output
+        echo "all_tags=$(cat /tmp/all_tags.json)" >> $GITHUB_OUTPUT
+
   # Add PR comment with published images
   pr-comment:
     needs: publish-container
@@ -154,17 +189,6 @@ jobs:
         echo "owner=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
         echo "repo=$(echo ${{ github.event.repository.name }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
 
-    - name: Extract metadata (tags, labels) for Docker
-      id: meta
-      uses: docker/metadata-action@v5
-      with:
-        images: ${{ inputs.registry }}/${{ steps.lowercase.outputs.owner }}/${{ steps.lowercase.outputs.repo }}
-        tags: |
-          type=ref,event=tag
-          type=ref,event=pr
-          type=raw,value=pr-${{ github.event.pull_request.number }}-${{ github.sha }},event=pr
-          type=sha
-
     - name: Generate Comment Body
       id: comment-body
       run: |
@@ -178,32 +202,11 @@ jobs:
         echo "" >> $COMMENT_FILE
         echo '```' >> $COMMENT_FILE
         
-        # Extract just the tag parts from metadata output
-        # The metadata output might include full image references like registry/owner/repo:tag
-        # We just want the tag part (after the last colon)
-        echo "${{ steps.meta.outputs.tags }}" | while read -r full_tag; do
-          if [ -n "$full_tag" ]; then
-            # Extract just the tag part (after the last colon)
-            tag=$(echo "$full_tag" | awk -F: '{print $NF}')
-            echo "$tag" >> pure_tags.txt
+        # Parse the JSON array of tags from the matrix job
+        echo '${{ needs.publish-container.outputs.matrix-tags }}' | jq -r '.[]' | while read -r tag; do
+          if [ -n "$tag" ]; then
+            echo "$tag" >> $COMMENT_FILE
           fi
-        done
-        
-        # Loop through all the dockerfiles from the input
-        echo '${{ inputs.dockerfiles }}' | jq -c '.[]' | while read -r config; do
-          # Extract values from the config
-          prefix=$(echo $config | jq -r '.prefix // ""')
-          postfix=$(echo $config | jq -r '.postfix // ""')
-          
-          # Construct the image name
-          image_name="${{ inputs.registry }}/${{ steps.lowercase.outputs.owner }}/$prefix${{ steps.lowercase.outputs.repo }}$postfix"
-          
-          # For each tag, output the full image:tag reference
-          while read -r tag; do
-            if [ -n "$tag" ]; then
-              echo "$image_name:$tag" >> $COMMENT_FILE
-            fi
-          done < pure_tags.txt
         done
         
         echo '```' >> $COMMENT_FILE
