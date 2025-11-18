@@ -174,7 +174,7 @@ jobs:
 
     - name: Upload Markdown Artifact
       if: github.event_name == 'pull_request' && inputs.push
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: ${{ matrix.config.prefix }}${{ steps.lowercase.outputs.repo }}${{ matrix.config.postfix }}.md
         path: /tmp/${{ matrix.config.prefix }}${{ steps.lowercase.outputs.repo }}${{ matrix.config.postfix }}.md
@@ -190,7 +190,7 @@ jobs:
     
     steps:
     - name: Download All Markdown Artifacts
-      uses: actions/download-artifact@v5
+      uses: actions/download-artifact@v6
       with:
         pattern: '*.md'
         path: /tmp/markdown-outputs
