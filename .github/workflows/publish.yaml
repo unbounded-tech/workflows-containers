@@ -112,6 +112,7 @@ jobs:
           type=ref,event=branch
           type=ref,event=tag
           type=ref,event=pr
+          ${{ github.event_name == 'pull_request' && format('type=raw,value={0}', github.head_ref) || '' }}
           ${{ github.event_name == 'pull_request' && format('type=raw,value=pr-{0}-{1}', github.event.pull_request.number, github.event.pull_request.head.sha) || '' }}
         labels: |
           org.opencontainers.image.title=${{ matrix.config.prefix }}${{ steps.lowercase.outputs.repo }}${{ matrix.config.postfix }}
