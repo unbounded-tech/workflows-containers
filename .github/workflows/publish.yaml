@@ -34,6 +34,12 @@ on:
         type: boolean
         default: false
 
+      tag_sha:
+        description: 'Whether to tag images with the commit SHA. Default: false'
+        required: false
+        type: boolean
+        default: false
+
     secrets:
       docker_password:
         description: 'Docker password for registry login. Default: GITHUB_TOKEN'
@@ -122,6 +128,7 @@ jobs:
           type=ref,event=pr
           ${{ github.event_name == 'pull_request' && inputs.tag_branch_on_pr && format('type=raw,value={0}', steps.lowercase.outputs.branch) || '' }}
           ${{ github.event_name == 'pull_request' && format('type=raw,value=pr-{0}-{1}', github.event.pull_request.number, github.event.pull_request.head.sha) || '' }}
+          ${{ inputs.tag_sha && format('type=raw,value={0}', github.sha) || '' }}
         labels: |
           org.opencontainers.image.title=${{ matrix.config.prefix }}${{ steps.lowercase.outputs.repo }}${{ matrix.config.postfix }}
 

@@ -1,0 +1,22 @@
+name: On Push Branch
+
+on:
+  push:
+
+permissions:
+  packages: write
+  contents: write
+  pull-requests: write
+
+jobs:
+  build-and-publish:
+    name: Build Test
+    uses: ./.github/workflows/publish.yaml
+    with:
+      dockerfiles: |
+        [
+          {"dockerfile":"./test/test-1.Dockerfile","context":"./test","prefix":"test1-"},
+          {"dockerfile":"./test/test-2.Dockerfile","postfix":"test2"}
+        ]
+      push: true
+      tag_sha: true
