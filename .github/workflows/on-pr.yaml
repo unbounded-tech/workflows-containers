@@ -21,3 +21,4 @@ jobs:
           {"dockerfile":"./test/test-2.Dockerfile","postfix":"test2"}
         ]
       push: true
+      tag_branch_on_pr: true

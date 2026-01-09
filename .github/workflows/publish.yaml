@@ -95,9 +95,8 @@ jobs:
       run: |
         echo "owner=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
         echo "repo=$(echo ${{ github.event.repository.name }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
-        # Sanitize branch name for Docker tag (replace / with -)
-        BRANCH="${{ github.head_ref }}"
-        echo "branch=${BRANCH//\//-}" >> $GITHUB_OUTPUT
+        # Sanitize branch name for Docker tag (replace / with -, lowercase)
+        echo "branch=$(echo ${{ github.head_ref }} | tr '/' '-' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
 
     - name: Set up QEMU
       uses: docker/setup-qemu-action@v3
