@@ -20,3 +20,4 @@ jobs:
         ]
       push: true
       tag_sha: true
+      tag_branch_sha: true
