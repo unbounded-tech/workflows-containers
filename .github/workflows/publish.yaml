@@ -27,7 +27,13 @@ on:
         required: false
         type: string
         default: 'ghcr.io'
-    
+
+      tag_branch_on_pr:
+        description: 'Whether to tag images with the branch name on PR events. Default: false'
+        required: false
+        type: boolean
+        default: false
+
     secrets:
       docker_password:
         description: 'Docker password for registry login. Default: GITHUB_TOKEN'
@@ -84,11 +90,13 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v6
 
-    - name: Set lowercase names
+    - name: Set lowercase names and sanitize branch
       id: lowercase
       run: |
         echo "owner=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
         echo "repo=$(echo ${{ github.event.repository.name }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+        # Sanitize branch name for Docker tag (replace / with -, lowercase)
+        echo "branch=$(echo ${{ github.head_ref }} | tr '/' '-' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
 
     - name: Set up QEMU
       uses: docker/setup-qemu-action@v3
@@ -109,8 +117,10 @@ jobs:
       with:
         images: ${{ inputs.registry }}/${{ steps.lowercase.outputs.owner }}/${{ matrix.config.prefix }}${{ steps.lowercase.outputs.repo }}${{ matrix.config.postfix }}
         tags: |
+          type=ref,event=branch
           type=ref,event=tag
           type=ref,event=pr
+          ${{ github.event_name == 'pull_request' && inputs.tag_branch_on_pr && format('type=raw,value={0}', steps.lowercase.outputs.branch) || '' }}
           ${{ github.event_name == 'pull_request' && format('type=raw,value=pr-{0}-{1}', github.event.pull_request.number, github.event.pull_request.head.sha) || '' }}
         labels: |
           org.opencontainers.image.title=${{ matrix.config.prefix }}${{ steps.lowercase.outputs.repo }}${{ matrix.config.postfix }}

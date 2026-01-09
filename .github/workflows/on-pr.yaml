@@ -13,7 +13,7 @@ permissions:
 jobs:
   build-and-publish:
     name: Build Test
-    uses: unbounded-tech/workflows-containers/.github/workflows/publish.yaml@main
+    uses: ./.github/workflows/publish.yaml
     with:
       dockerfiles: |
         [
@@ -21,3 +21,4 @@ jobs:
           {"dockerfile":"./test/test-2.Dockerfile","postfix":"test2"}
         ]
       push: true
+      tag_branch_on_pr: true
