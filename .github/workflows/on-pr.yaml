@@ -27,7 +27,7 @@ jobs:
     name: Build Test
     uses: ./.github/workflows/publish.yaml
     with:
-      runs-on: ubuntu-slim
+      runs-on: ubuntu-latest-arm64
       dockerfiles: |
         [
           {"dockerfile":"./test/test-1.Dockerfile","context":"./test"}
