@@ -24,7 +24,7 @@ jobs:
       tag_branch_on_pr: true
 
   runs-on-build:
-    name: Build Test
+    name: runs-on build test
     uses: ./.github/workflows/publish.yaml
     with:
       runs-on: ubuntu-24.04-arm
