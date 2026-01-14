@@ -22,3 +22,15 @@ jobs:
         ]
       push: true
       tag_branch_on_pr: true
+
+  runs-on-build:
+    name: Build Test
+    uses: ./.github/workflows/publish.yaml
+    with:
+      runs-on: ubuntu-slim
+      dockerfiles: |
+        [
+          {"dockerfile":"./test/test-1.Dockerfile","context":"./test"}
+        ]
+      push: true
+      tag_branch_on_pr: true
