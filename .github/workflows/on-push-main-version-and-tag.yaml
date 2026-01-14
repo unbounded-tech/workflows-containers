@@ -22,8 +22,22 @@ jobs:
         ]
       push: false
 
+  runs-on-build:
+    name: runs-on build test
+    uses: ./.github/workflows/publish.yaml
+    with:
+      runs-on: ubuntu-24.04-arm
+      dockerfiles: |
+        [
+          {"dockerfile":"./test/test-1.Dockerfile","context":"./test"}
+        ]
+      push: false
+      tag_branch_on_pr: false
+
   version-and-tag:
-    needs: build-test
+    needs: 
+      - build-test
+      - runs-on-build
     name: Version and Tag
     uses: unbounded-tech/workflow-vnext-tag/.github/workflows/workflow.yaml@v1.20.2
     secrets: inherit

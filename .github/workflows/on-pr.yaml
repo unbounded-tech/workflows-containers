@@ -22,3 +22,15 @@ jobs:
         ]
       push: true
       tag_branch_on_pr: true
+
+  runs-on-build:
+    name: runs-on build test
+    uses: ./.github/workflows/publish.yaml
+    with:
+      runs-on: ubuntu-24.04-arm
+      dockerfiles: |
+        [
+          {"dockerfile":"./test/test-1.Dockerfile","context":"./test"}
+        ]
+      push: false
+      tag_branch_on_pr: false
