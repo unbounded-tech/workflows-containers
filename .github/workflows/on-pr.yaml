@@ -32,5 +32,5 @@ jobs:
         [
           {"dockerfile":"./test/test-1.Dockerfile","context":"./test"}
         ]
-      push: true
-      tag_branch_on_pr: true
+      push: false
+      tag_branch_on_pr: false
