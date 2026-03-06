@@ -168,7 +168,7 @@ jobs:
         echo "Package name: ${{ inputs.registry }}/${{ steps.lowercase.outputs.owner }}/${{ matrix.config.prefix }}${{ steps.lowercase.outputs.repo }}${{ matrix.config.postfix }}:${{ github.ref_name }}"
 
     - name: Build and Optionally Push Docker image
-      uses: docker/build-push-action@v6
+      uses: docker/build-push-action@v7
       with:
         context: ${{ matrix.config.context }}
         push: ${{ inputs.push }}
