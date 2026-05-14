@@ -58,6 +58,12 @@ on:
         type: boolean
         default: false
 
+      platforms:
+        description: 'Comma-separated list of target platforms for buildx (e.g. "linux/amd64,linux/arm64"). When empty (default), buildx builds only for the runner''s native platform. When set, QEMU is installed and a multi-platform manifest list is published.'
+        required: false
+        type: string
+        default: ''
+
     secrets:
       docker_password:
         description: 'Docker password for registry login. Default: GITHUB_TOKEN'
@@ -173,6 +179,7 @@ jobs:
         context: ${{ matrix.config.context }}
         push: ${{ inputs.push }}
         file: ${{ matrix.config.dockerfile }}
+        platforms: ${{ inputs.platforms }}
         tags: |
           ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}

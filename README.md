@@ -44,6 +44,7 @@ jobs:
 | `tag_branch_on_pr` | Tag images with the branch name on PR events | No | `false` |
 | `tag_sha` | Tag images with the commit SHA | No | `false` |
 | `tag_branch_sha` | Tag images with `branch-sha` format | No | `false` |
+| `platforms` | Comma-separated buildx target platforms (e.g. `linux/amd64,linux/arm64`). Empty = native only. | No | `""` |
 
 ### Secrets
 
@@ -216,3 +217,20 @@ permissions:
   contents: read       # For accessing repository contents
   pull-requests: write # For posting PR comments
 ```
+
+#### Multi-Platform Builds
+
+Build a manifest list for multiple platforms (QEMU is set up automatically):
+
+```yaml
+jobs:
+  publish:
+    uses: unbounded-tech/workflows-containers/.github/workflows/publish.yaml@main
+    with:
+      platforms: linux/amd64,linux/arm64
+```
+
+This is the right shape for images that need to run on mixed-arch
+clusters (e.g. arm64 EKS nodes). When `platforms` is empty (the default)
+the image is built only for the runner's native platform — the existing
+behavior is preserved.
